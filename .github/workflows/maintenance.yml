@@ -1,0 +1,64 @@
+name: Maintenance and Batch Jobs
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      job_type:
+        description: "Which maintenance task to run?"
+        required: true
+        default: "cleanup"
+        type: choice
+        options:
+          - cleanup
+          - reindex
+          - experiment
+
+jobs:
+  maintenance:
+    runs-on: [self-hosted, macOS, X64]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip3 install -r requirements.txt
+          fi
+
+      - name: Decide job type
+        id: job
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "selected=cleanup" >> $GITHUB_OUTPUT
+          else
+            echo "selected=${{ inputs.job_type }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Clean logs / temp files
+        if: steps.job.outputs.selected == 'cleanup'
+        run: |
+          echo "Running cleanup"
+          python3 scripts/cleanup.py
+
+      - name: Re-index RAG knowledge base
+        if: steps.job.outputs.selected == 'reindex'
+        run: |
+          echo "Running reindex"
+          python3 scripts/reindex_kb.py
+
+      - name: Run experiment
+        if: steps.job.outputs.selected == 'experiment'
+        run: |
+          echo "Running experiment"
+          python3 scripts/run_experiment.py

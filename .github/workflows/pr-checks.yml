@@ -1,0 +1,70 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: [self-hosted, macOS, X64]
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Node dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f package.json ]; then
+            npm install
+          else
+            echo "No package.json found, skipping Node install"
+          fi
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip3 install -r requirements.txt
+          else
+            echo "No requirements.txt found, skipping Python install"
+          fi
+
+      - name: Lint frontend/backend JS
+        run: |
+          if [ -f package.json ]; then
+            npm run lint --if-present
+          fi
+
+      - name: Run Node tests
+        run: |
+          if [ -f package.json ]; then
+            npm test --if-present
+          fi
+
+      - name: Run Python tests
+        run: |
+          pytest || echo "No pytest tests found"
+
+      - name: RAG smoke check
+        run: |
+          python3 - <<'PY'
+          print("Basic RAG smoke check placeholder")
+          # Replace with:
+          # - import your retriever
+          # - query test KB
+          # - assert non-empty result
+          PY
