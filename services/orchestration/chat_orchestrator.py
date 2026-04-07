@@ -1,12 +1,12 @@
 from sqlalchemy.orm import Session
 
 from packages.types.schemas import ChatRequest, ChatResponse
-from packages.utils.logger import get_logger
 from packages.utils.citations import normalize_inline_citations
-from services.retrieval.retrieval_service import RetrievalService
+from packages.utils.logger import get_logger
 from services.analytics.analytics_service import AnalyticsService
-from services.llm.gemini_adapter import GeminiAdapter
 from services.conversations.conversation_service import ConversationService
+from services.llm.factory import get_llm_provider
+from services.retrieval.retrieval_service import RetrievalService
 
 logger = get_logger(__name__)
 
@@ -15,7 +15,7 @@ class ChatOrchestrator:
     def __init__(self) -> None:
         self.retrieval = RetrievalService()
         self.analytics = AnalyticsService()
-        self.llm = GeminiAdapter()
+        self.llm = get_llm_provider()
         self.conversations = ConversationService()
 
     def _classify_intent(self, message: str) -> str:
@@ -55,6 +55,7 @@ class ChatOrchestrator:
         )
 
         intent = self._classify_intent(request.message)
+
         sources = self.retrieval.search(db=db, query=request.message)
         analytics = []
 
@@ -63,10 +64,12 @@ class ChatOrchestrator:
         if not strong_sources and not analytics:
             answer = "I don’t have enough grounded information to answer that yet."
         else:
-            answer = self.llm.generate_answer(
+            answer = self.llm.generate(
                 user_message=request.message,
                 sources=sources,
                 analytics=analytics,
+                temperature=0.2,
+                max_tokens=400,
             )
             answer = normalize_inline_citations(answer)
 
@@ -85,6 +88,6 @@ class ChatOrchestrator:
             analytics=analytics,
             meta={
                 "intent": intent,
-                "model": "gemini",
+                "model": getattr(self.llm, "provider_name", "unknown"),
             },
         )
